@@ -1,0 +1,13 @@
+hong_f4vg_1121\heap_4.o: ../Middlewares/Third_Party/FreeRTOS/Source/portable/MemMang/heap_4.c
+hong_f4vg_1121\heap_4.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdlib.h
+hong_f4vg_1121\heap_4.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h
+hong_f4vg_1121\heap_4.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stddef.h
+hong_f4vg_1121\heap_4.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdint.h
+hong_f4vg_1121\heap_4.o: ../Core/Inc/FreeRTOSConfig.h
+hong_f4vg_1121\heap_4.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h
+hong_f4vg_1121\heap_4.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/portable.h
+hong_f4vg_1121\heap_4.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/deprecated_definitions.h
+hong_f4vg_1121\heap_4.o: ../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F/portmacro.h
+hong_f4vg_1121\heap_4.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/mpu_wrappers.h
+hong_f4vg_1121\heap_4.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h
+hong_f4vg_1121\heap_4.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h

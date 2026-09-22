@@ -1,0 +1,163 @@
+  一、整体是什么系统
+
+  这是仿生蝠鲼机器人的完整控制软件，由三块板子协同工作：
+
+  ┌──────────────────┬─────────────┬────────────────┬────────────────────────────────────────────────────────────┐
+  │       目录       │    芯片     │    开发方式    │                            角色                            │
+  ├──────────────────┼─────────────┼────────────────┼────────────────────────────────────────────────────────────┤
+  │ 主控板 - 改      │ STM32F407   │ HAL + FreeRTOS │ 大脑：接收遥控指令、生成鳍条摆动波形、读陀螺仪、控制舵机   │
+  ├──────────────────┼─────────────┼────────────────┼────────────────────────────────────────────────────────────┤
+  │ 驱动板_z1211     │ STM32F103C8 │ HAL            │ 执行器：单块"鳍条智能舵机"，用 PID 把 PWM 指令变成鳍面角度 │
+  ├──────────────────┼─────────────┼────────────────┼────────────────────────────────────────────────────────────┤
+  │ cexian_2624_last │ STM32F103C8 │ 标准外设库     │ 感知：侧线系统，读 10 路水压传感器                         │
+  └──────────────────┴─────────────┴────────────────┴────────────────────────────────────────────────────────────┘
+
+  三者关系：
+  - 主控板 通过串口接收遥控命令 → 生成 8 路正弦 PWM 信号（鳍条的拍动）→ 发给驱动板；
+  - 驱动板 每块负责一根鳍条，把 PWM 占空比换算成目标角度，用 PID 闭环（角度传感器反馈）驱动电磁舵机转动鳍面；
+  - 侧线板 模仿鱼类侧线，用 10 个水压传感器感知周围水流，把压力数据通过串口上传。
+
+  ---
+  二、主控板（主控板 - 改，STM32F407 + FreeRTOS）
+
+  这是整个机器人的核心，运行 FreeRTOS，跑多个任务。
+
+  Core/Src/main.c —— 程序入口
+
+  - 初始化时钟（HSE 8MHz → PLL → 168MHz）、GPIO、DMA、TIM3/TIM4、以及 5 路串口（UART4、UART5、USART1、USART3、USART6）。
+  - 启动 UART4 中断接收、初始化用户串口（UART6），然后启动 FreeRTOS 调度器。
+  - fputc 重定向到 UART5（调试打印用）。
+  - HAL_UART_RxCpltCallback：UART4 收到遥控命令存进 radio_cmd_queue；FSUS 舵机串口收到字节压入环形缓冲区。
+
+  Core/Src/freertos.c —— 多任务核心（最关键）
+
+  创建了 8 个线程 + 消息队列 + 定时器：
+  - PrintTask：从队列取消息用 UART4 打印（线程安全）。
+  - CommandDispatcherTask：解析 UART4 遥控命令，S 开头=设角度，P 开头=解析 PWM 命令（前进/转弯/旋转/正弦摆动）。
+  - PWMControlTask：启动 8 路 PWM，初始化占空比。
+  - GyroDataTask：调用 gyro_get 读取 IMU（加速度/角速度/欧拉角）。
+  - ServoControlTask：用 Fashion Star 协议控制总线舵机角度。
+  - 其余（RadioComm / BoardCom / OnboardComp）为占位任务。
+  - PWM_TimerCallback（5ms 定时器）：核心运动算法——对 8 个鳍条通道做正弦相位推进，生成正弦占空比驱动鳍条拍动。
+  - 底部定义了一套运动命令协议：P + CMD + 通道掩码 + 频率 + 相位，实现前进/左转/右转/左右旋转/单鳍条摆动，通过给 8
+  个通道分配不同相位差（PWM_SetForward、PWM_SetTurn、PWM_SetRotate）来产生鱼鳍波动。
+
+  HARDWARE/servo_set/servo_set.c —— 8 路 PWM 驱动
+
+  - 映射 8 个 PWM 通道到 TIM3 的 4 路（PB0/PB1/PB4/PB5）和 TIM4 的 4 路（PD12~PD15）。
+  - 提供 PWM_StartAll、PWM_SetDutyCycle（写 CCR 寄存器）、PWM_SetFrequency。
+
+  HARDWARE/fashion_star_uart_servo/ —— Fashion Star 总线舵机驱动库
+
+  - 完整的串口总线舵机协议：打包/解析数据帧（帧头
+  0x1C05/0xAA55、校验和）、设置角度（单圈/多圈、按周期/按转速）、同步命令、读取舵机数据（电压/电流/温度/角度/圈数）等。
+
+  HARDWARE/gyro_get/gyro_get.c —— 陀螺仪（IMU）驱动
+
+  - 用 DMA 接收（UART3），解析 0x55 帧头 的 WitMotion 9 轴协议：0x51 加速度、0x52 角速度、0x53 角度。
+  - 把原始值换算成物理量（g、°/s、°）。
+
+  HARDWARE/user_uart/user_uart.c —— 用户串口封装
+
+  - 把 HAL 串口包装成带发送/接收环形缓冲区的 Usart_DataTypeDef，供舵机库使用。
+
+  HARDWARE/ring_buffer/ring_buffer.c —— 环形缓冲区
+
+  - 通用环形队列：Push/Pop、读写各种类型（byte/short/long/float）、校验和、Peek，是舵机协议和串口缓冲的基础。
+
+  ---
+  三、驱动板（驱动板_z1211，STM32F103C8）
+
+  这是单块鳍条的智能舵机驱动，核心是一个带角度反馈的 PID 闭环。注释里明确写着 "PID control for electromagnetic
+  rudder"（电磁舵机）。
+
+  Core/Src/main.c —— 主逻辑
+
+  - 用 TIM3 输入捕获 接收主控板发来的 PWM 指令（PA6），测出占空比 → 换算成目标相位/角度。
+  - 用 ADC（PA5）读取角度传感器（电位器/磁编码器）电压 → 换算成实际角度。
+  - 跑一个位置式 PID（PID_Calculate），让实际角度跟踪目标角度。
+  - 根据 PID 输出正负，用 TIM1 两路 PWM（PA8 正转、PA9 反转）驱动电磁舵机（H 桥）正反转。
+  - Rudder_Control：PID 输出 >5 正向转、<-5 反向转，中间死区停。
+  - 串口 USART2 可手动设角度（0~20°）调试。
+
+  关键换算函数：
+  - PWM_Duty_to_Angle：占空比 → 相位（0~2π），用于正弦运动。
+  - ADC_Volt_to_Angle：电压 → 角度（0~20°，按实测 ADC 标定值 0.4477~0.6127V）。
+  - 注释里保存了 6 路鳍条（L1~L3、R1~R3）的 PID 参数标定记录。
+
+  Core/Src/adc.c —— ADC 配置（ADC1 通道5，PA5，读角度传感器）
+
+  Core/Src/tim.c —— 定时器配置
+
+  - TIM1：PWM 输出，2 通道（PA8/PA9），10kHz，驱动电机。
+  - TIM3：输入捕获（PA6），测输入 PWM 占空比。
+
+  Core/Src/usart.c / gpio.c —— 串口2 调试 + GPIO 时钟
+
+  ---
+  四、侧线板（cexian_2624_last，STM32F103C8，标准库）
+
+  模仿鱼类的侧线系统，感知水压。
+
+  User/main.c —— 主逻辑
+
+  - 10 路 I2C 压力传感器（iic_pins[10] 定义每路的 SCL/SDA 引脚），用的是 GPIO 模拟 I2C。
+  - 上电先做标定：采 10 轮、每轮读 10 个传感器，算出每个传感器的零点偏移 offset[i]（用于消除个体差异）。
+  - 主循环：循环对 10 个传感器发转换命令 → 等待转换完成 → 读数据 → 换算压力 → 加上偏移 → printf 通过 UART1 输出（格式
+  计数,压力0,压力1,...,压力9,计数）。
+  - 用 disable_jtag_pins 释放 PA15/PB3/PB4 作为普通 IO 用（多路 I2C 需要）。
+
+  Hardward/WF5805/wfsensor.c —— WF5805 压力传感器驱动
+
+  - WF5805 是 I2C 地址 0xDA 的压力+温度传感器。
+  - WFSensor_indicateGroupConvert：发 0x30 寄存器 + 0x0A 组转换命令。
+  - WFSensor_WaitFinish：读 0x02 状态寄存器判断转换是否完成。
+  - WFSensor_getTPData / calculatePress：读 5 字节原始数据，解析 24 位压力（公式 Press = (500*fDat+750)/6.0，单位
+  kPa）和 16 位温度。
+
+  Hardward/IIC/myiic.c —— GPIO 模拟 I2C
+
+  - 纯软件 I2C：起始/停止/应答/收发字节，支持任意 GPIO 引脚（通过 IIC_Pin_t 结构体传入），这是多路 I2C 的关键。
+
+  Hardward/UART1_serial/usart_serial.c —— UART1 + printf 重定向
+
+  - fputc 重定向，让 printf 输出到串口（115200），用于向上位机打印数据。
+
+  Hardward/UART_DMA1/uart3_dma.c —— UART3 + DMA（与主控通信）
+
+  - 发送：DMA1 通道2 把 10 路传感器数据（save[10]）打包成 AA ... FF 帧发送。
+  - 接收：DMA1 通道3 + 空闲中断（IDLE）接收控制命令，解析 AA 命令 数据 FC FF 协议（Tuna_Mode 前后、Tuna_Dir
+  方向、Tuna_Pectoral 胸鳍、Tuna_Speed 速度）。
+  - 注：代码里 Tuna_ 前缀说明这段协议是从"金枪鱼"项目复用的；SendSensorDataBack 目前在 main
+  里未直接调用，属于预留/历史功能。
+
+  其他
+
+  - Hardward/Led/led_PC13.c：点 PC13 LED（工作指示）。
+  - Hardward/TIMER/timer.c：TIM3 通用定时器（当前只是计数，未深度使用）。
+  - System/delay/、System/sys/、System/usart/：延时、GPIO 封装、串口（正点原子风格）。
+
+  ---
+  五、三块板子如何组合成一个整体
+
+                     ┌─────────────────────────────┐
+     遥控/上位机 ──▶ │   主控板 (STM32F407)        │
+     (UART4/5)      │  FreeRTOS 多任务            │
+                    │  · 解析遥控命令              │
+                    │  · 正弦波形生成 (8通道)      │── PWM ──▶ ┌ 驱动板×N ──▶ 鳍条电磁舵机
+                    │  · 陀螺仪(姿态)              │           └(每块PID闭环)
+                    │  · 总线舵机控制              │
+                    └─────────────────────────────┘
+                                ▲
+                                │ 串口(UART3协议 AA..FF)
+                                │
+                    ┌─────────────────────────────┐
+                    │  侧线板 (STM32F103C8)        │
+                    │  10路 WF5805 水压传感器      │
+                    │  (仿生侧线感知水流)          │
+                    └─────────────────────────────┘
+
+  一句话总结：这是一套仿生蝠鲼（魔鬼鱼）机器人的分布式控制系统——主控板（F407+FreeRTOS）负责决策与运动波形生成，多块驱动
+  板（F103）各自用 PID 闭环把波形指令变成鳍条的实际拍动，侧线板（F103）用 10
+  个水压传感器模拟鱼类侧线做水动力感知，三者通过串口/PWM
+  连接，共同实现蝠鲼的游动（正弦鳍波动前进、转向、旋转）与环境感知。

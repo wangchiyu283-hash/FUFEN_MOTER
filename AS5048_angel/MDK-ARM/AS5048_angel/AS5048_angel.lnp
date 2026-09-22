@@ -1,0 +1,27 @@
+--cpu Cortex-M3
+"as5048_angel\startup_stm32f103xe.o"
+"as5048_angel\main.o"
+"as5048_angel\gpio.o"
+"as5048_angel\spi.o"
+"as5048_angel\usart.o"
+"as5048_angel\as5048a.o"
+"as5048_angel\stm32f1xx_it.o"
+"as5048_angel\stm32f1xx_hal_msp.o"
+"as5048_angel\stm32f1xx_hal_gpio_ex.o"
+"as5048_angel\stm32f1xx_hal_spi.o"
+"as5048_angel\stm32f1xx_hal.o"
+"as5048_angel\stm32f1xx_hal_rcc.o"
+"as5048_angel\stm32f1xx_hal_rcc_ex.o"
+"as5048_angel\stm32f1xx_hal_gpio.o"
+"as5048_angel\stm32f1xx_hal_dma.o"
+"as5048_angel\stm32f1xx_hal_cortex.o"
+"as5048_angel\stm32f1xx_hal_pwr.o"
+"as5048_angel\stm32f1xx_hal_flash.o"
+"as5048_angel\stm32f1xx_hal_flash_ex.o"
+"as5048_angel\stm32f1xx_hal_exti.o"
+"as5048_angel\stm32f1xx_hal_uart.o"
+"as5048_angel\system_stm32f1xx.o"
+--strict --scatter "AS5048_angel\AS5048_angel.sct"
+--summary_stderr --info summarysizes --map --load_addr_map_info --xref --callgraph --symbols
+--info sizes --info totals --info unused --info veneers
+--list "AS5048_angel.map" -o AS5048_angel\AS5048_angel.axf

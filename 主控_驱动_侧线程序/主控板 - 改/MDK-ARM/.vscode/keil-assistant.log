@@ -1,0 +1,31 @@
+[info] Log at : 2026/8/4|11:20:40|GMT+0800
+
+[info] Log at : 2026/8/4|11:20:55|GMT+0800
+
+[info] Log at : 2026/8/4|15:54:23|GMT+0800
+
+[info] Log at : 2026/8/4|15:54:33|GMT+0800
+
+[info] Log at : 2026/8/4|16:35:46|GMT+0800
+
+[info] Log at : 2026/8/4|16:42:01|GMT+0800
+
+[info] Log at : 2026/8/4|16:44:10|GMT+0800
+
+[info] Log at : 2026/8/4|16:44:48|GMT+0800
+
+[info] Log at : 2026/8/4|16:48:16|GMT+0800
+
+[SyntaxError: Unexpected token '﻿', "﻿{
+    "c"... is not valid JSON
+	at JSON.parse (<anonymous>)
+	at F.updateCppProperties (c:\Users\Jiao Wei\.vscode\extensions\cl.keil-assistant-1.7.0\dist\extension.js:1:10849)
+	at F.<anonymous> (c:\Users\Jiao Wei\.vscode\extensions\cl.keil-assistant-1.7.0\dist\extension.js:1:12579)
+	at Generator.next (<anonymous>)
+	at c:\Users\Jiao Wei\.vscode\extensions\cl.keil-assistant-1.7.0\dist\extension.js:1:4480
+	at new Promise (<anonymous>)
+	at r (c:\Users\Jiao Wei\.vscode\extensions\cl.keil-assistant-1.7.0\dist\extension.js:1:4225)
+	at F.load (c:\Users\Jiao Wei\.vscode\extensions\cl.keil-assistant-1.7.0\dist\extension.js:1:11310)
+	at w.<anonymous> (c:\Users\Jiao Wei\.vscode\extensions\cl.keil-assistant-1.7.0\dist\extension.js:1:8737)
+	at Generator.next (<anonymous>)
+	at a (c:\Users\Jiao Wei\.vscode\extensions\cl.keil-assistant-1.7.0\dist\extension.js:1:4282)]

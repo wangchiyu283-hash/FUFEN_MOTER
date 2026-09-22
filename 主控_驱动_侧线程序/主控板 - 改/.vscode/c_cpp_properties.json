@@ -1,0 +1,35 @@
+{
+    "configurations": [
+        {
+            "name": "STM32F407VG (Keil)",
+            "includePath": [
+                "${workspaceFolder}/Core/Inc",
+                "${workspaceFolder}/Drivers/STM32F4xx_HAL_Driver/Inc",
+                "${workspaceFolder}/Drivers/STM32F4xx_HAL_Driver/Inc/Legacy",
+                "${workspaceFolder}/Drivers/CMSIS/Include",
+                "${workspaceFolder}/Drivers/CMSIS/Device/ST/STM32F4xx/Include",
+                "${workspaceFolder}/Middlewares/Third_Party/FreeRTOS/Source/include",
+                "${workspaceFolder}/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2",
+                "${workspaceFolder}/Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F",
+                "${workspaceFolder}/HARDWARE/user_uart",
+                "${workspaceFolder}/HARDWARE/ring_buffer",
+                "${workspaceFolder}/HARDWARE/fashion_star_uart_servo_examples",
+                "${workspaceFolder}/HARDWARE/fashion_star_uart_servo",
+                "${workspaceFolder}/HARDWARE/gyro_get",
+                "${workspaceFolder}/HARDWARE/servo_set",
+                "${workspaceFolder}/MDK-ARM"
+            ],
+            "defines": [
+                "USE_HAL_DRIVER",
+                "STM32F407xx",
+                "STM32_THREAD_SAFE_STRATEGY=4",
+                "__CC_ARM"
+            ],
+            "compilerPath": "",
+            "cStandard": "c99",
+            "cppStandard": "c++11",
+            "intelliSenseMode": "gcc-arm"
+        }
+    ],
+    "version": 4
+}
