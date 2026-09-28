@@ -5,6 +5,7 @@
 "as5048_angel\spi.o"
 "as5048_angel\usart.o"
 "as5048_angel\as5048a.o"
+"as5048_angel\servo.o"
 "as5048_angel\stm32f1xx_it.o"
 "as5048_angel\stm32f1xx_hal_msp.o"
 "as5048_angel\stm32f1xx_hal_gpio_ex.o"

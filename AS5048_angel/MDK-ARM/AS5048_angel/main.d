@@ -31,3 +31,4 @@ as5048_angel\main.o: ../Core/Inc/spi.h
 as5048_angel\main.o: ../Core/Inc/usart.h
 as5048_angel\main.o: ../Core/Inc/gpio.h
 as5048_angel\main.o: ../Core/Inc/as5048a.h
+as5048_angel\main.o: ../Core/Inc/servo.h

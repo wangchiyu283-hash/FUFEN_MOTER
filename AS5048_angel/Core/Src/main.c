@@ -25,6 +25,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "as5048a.h"
+#include "servo.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -67,8 +68,26 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-uint8_t  TXD[4] = {0};
-uint16_t origin_value = 0;   /* 开机采到的零位基准（软件零位） */
+uint8_t  TXD[6] = {0};
+
+/*
+ * 固定软件零点：舵机/磁铁处于机械 0° 时的 AS5048A 原始角度计数。
+ * 标定方法：临时发送/观察原始角度，机械 0° 时读出的 0~16383 数值填入此处。
+ * 该值一旦填好，程序每次上电都使用同一个零点，不再执行上电采零。
+ */
+//#define ENCODER_ZERO_RAW  (14479u) /* 1520 us 舵机中位时标定的 AS5048A 原始值 */
+#define ENCODER_ZERO_RAW  (14485u)
+#define ENCODER_DIRECTION (+1) /* 若舵机正角使原始值减小，改为 -1 */
+
+/* ---- 舵机校准扫描参数（单位 us） -------------------------------------------- */
+#define CAL_PULSE_MIN_US  1180u
+#define CAL_PULSE_MAX_US  1846u
+#define CAL_PULSE_STEP_US 50u
+#define CAL_DWELL_MS      300u
+
+/* ---- 采样平均（每步多采几次取平均，让数据更稳） ---- */
+#define SAMPLE_N         4         /* 每步采样次数 */
+#define SAMPLE_GAP_MS    2         /* 相邻采样间隔 */
 
 /* USER CODE END 0 */
 
@@ -105,13 +124,13 @@ int main(void)
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 	AS5048A_Init();
+	Servo_Init();               /* 舵机先输出中性脉宽，回到 0° */
 
 	TXD[0] = 0x55;              /* 帧头 */
-	TXD[1] = 0xAA;              /* 类型/状态字节，见主循环说明 */
 
-	/* 上电稳定后采一次零位基准（软件零位） */
-	HAL_Delay(50);
-	origin_value = AS5048A_ReadAngle().angle;
+	/* 舵机先回机械中立位，但零点使用上面的固定标定值 */
+	Servo_SetPulseUs(SERVO_PULSE_MID_US);
+	HAL_Delay(1000);
 
   /* USER CODE END 2 */
 
@@ -122,42 +141,53 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-		AS5048A_AngleResult_t res;
-		uint16_t raw, post;
-		uint32_t deg_x100;
-		static uint16_t last = 0;
+		static uint16_t last = 0;                     /* 上次有效原始角度 */
+		static uint16_t pulse_us = CAL_PULSE_MIN_US;
+		static int8_t pulse_step = 1;
 
-		res = AS5048A_ReadAngle();
-		raw = res.angle;
+		AS5048A_Status_t status = AS5048A_OK;
+		int32_t acc = 0;
+		uint8_t ok = 0;
+		uint8_t i;
 
-		/* 仅数据有效时更新，出错时保持上一次有效角度，避免输出跳变 */
-		if (res.status == AS5048A_OK)
+		/* 1. 直接扫描舵机控制脉宽，避免角度换算影响全行程测试。 */
+		Servo_SetPulseUs(pulse_us);
+		HAL_Delay(CAL_DWELL_MS);
+
+		/* 2. 连续采 SAMPLE_N 次取平均，滤除抖动 */
+		for (i = 0; i < SAMPLE_N; i++)
 		{
-			last = raw;
+			AS5048A_AngleResult_t r = AS5048A_ReadAngle();
+			if (r.status == AS5048A_OK) { acc += r.angle; ok++; }
+			else                        { status = r.status; }   /* 记录最近一次错误 */
+			HAL_Delay(SAMPLE_GAP_MS);
 		}
-
-		/* 相对角度：绕零位回绕，范围 0 ~ 16383 */
-		if (last >= origin_value)
+		if (ok)
 		{
-			post = last - origin_value;
+			last   = (uint16_t)(acc / ok);
+			status = AS5048A_OK;
 		}
-		else
-		{
-			post = 16384 - origin_value + last;
-		}
+		/* 全部采样失败则沿用 last（上一次有效角），status 保持错误类型 */
+		
+		int32_t rel = ((int32_t)last - (int32_t)ENCODER_ZERO_RAW) * ENCODER_DIRECTION;
+		if (rel > 8192) rel -= 16384;
+		else if (rel <= -8192) rel += 16384;
+		int16_t meas_x100 = (int16_t)(rel * 36000 / 16384);
 
-		/* 换算成实际角度：0.01° 定点，范围 0~35999（即 0.00°~359.99°）
-		 * 36000 / 16384 == 1125 / 512，纯整数运算、无浮点、无精度损失 */
-		deg_x100 = ((uint32_t)post * 1125u) / 512u;
+		/* 3. 校准帧：0x55 | 状态 | 脉宽 us(16 位) | 编码器原始角(16 位)。 */
+		TXD[1] = 0xAA + (uint8_t)status;
+		TXD[2] = (uint8_t)(pulse_us >> 8);
+		TXD[3] = (uint8_t)(pulse_us & 0xFFu);
+		TXD[4] = (uint8_t)((uint16_t)meas_x100 >> 8);
+		TXD[5] = (uint8_t)(meas_x100 & 0xFFu);
 
-		/* 帧格式：0x55 | 状态字节 | 角度高字节 | 角度低字节（单位 0.01°）
-		 * 状态字节：0xAA=正常，0xAB=EF 错误，0xAC=偶校验错 */
-		TXD[1] = 0xAA + (uint8_t)res.status;
-		TXD[2] = (uint8_t)(deg_x100 >> 8);
-		TXD[3] = (uint8_t)(deg_x100 & 0x00FF);
+		(void)HAL_UART_Transmit(&huart1, TXD, 6, 0xFFFF);
 
-		HAL_UART_Transmit(&huart1, TXD, 4, 0xFFFF);
-		HAL_Delay(200);   /* 200ms 发一帧（每秒 5 帧），觉得还快就再改大 */
+		/* 4. 到 500/2500 us 边界时反向，形成全行程脉宽三角波。 */
+		if (pulse_us >= CAL_PULSE_MAX_US) pulse_step = -1;
+		else if (pulse_us <= CAL_PULSE_MIN_US) pulse_step = 1;
+		pulse_us = (uint16_t)((int32_t)pulse_us +
+		                    pulse_step * (int32_t)CAL_PULSE_STEP_US);
     /* USER CODE END 3 */
   }
 }
@@ -260,3 +290,4 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
+

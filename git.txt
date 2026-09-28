@@ -1,0 +1,4 @@
+git status                 # 看看改了哪些
+git add -A                 # 把所有改动（新增/修改/删除）暂存             只上传部分文件：  git add main.c        git commit -m "update main.c"
+git commit -m "说明"        # 提交
+git push                   # 推送
